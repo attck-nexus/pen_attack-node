@@ -6,7 +6,7 @@ Complete guide for Ollama with ARM Mali G610 GPU acceleration on RTPI-PEN.
 
 ```bash
 # Start services
-./start-ollama.sh
+./scripts/ollama/start.sh
 
 # Pull a model
 docker exec rtpi-ollama ollama pull llama2
@@ -65,10 +65,10 @@ watch -n 1 'curl -s http://localhost:9100/api/status | jq .gpu'
 docker compose logs -f rtpi-ollama
 
 # Restart services
-./start-ollama.sh --force
+./scripts/ollama/start.sh --force
 
 # Check status
-./status-ollama.sh --verbose
+./scripts/ollama/status.sh --verbose
 ```
 
 ## GPU Optimization

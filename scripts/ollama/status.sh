@@ -1,5 +1,10 @@
 #!/bin/bash
 # RTPI-PEN: Ollama Stack Status
+# Usage: ./scripts/ollama/status.sh [--verbose]
+
+# Determine project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'

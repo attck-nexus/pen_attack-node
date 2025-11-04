@@ -1,8 +1,12 @@
 #!/bin/bash
 # RTPI-PEN: Start Ollama AI Inference Stack
-# Usage: ./start-ollama.sh [--force]
+# Usage: ./scripts/ollama/start.sh [--force]
 
 set -e
+
+# Determine project root
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -45,6 +49,7 @@ else
 fi
 
 log_info "Starting Ollama stack..."
+cd "$PROJECT_ROOT"
 sudo docker compose up -d rtpi-ollama rtpi-ollama-ui rtpi-gpu-monitor
 
 sleep 5

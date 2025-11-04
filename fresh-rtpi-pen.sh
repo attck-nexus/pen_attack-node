@@ -1321,6 +1321,26 @@ sleep 30
 # Create SysReptor superuser after services are ready
 create_sysreptor_superuser
 
+echo "🤖 Deploying Ollama AI Inference (Optional)..."
+echo "-------------------------------------"
+if [ "${DEPLOY_OLLAMA:-true}" = "true" ]; then
+    log "Starting Ollama AI Inference stack..."
+    if [ -f "./scripts/ollama/start.sh" ]; then
+        if bash ./scripts/ollama/start.sh; then
+            log "✅ Ollama AI Inference deployed successfully"
+            echo "  • Ollama API: http://localhost:11434"
+            echo "  • Open WebUI: http://localhost:3000"
+            echo "  • GPU Monitor: http://localhost:9100"
+        else
+            warn "⚠️  Ollama deployment encountered issues (services may still be starting)"
+        fi
+    else
+        warn "⚠️  Ollama start script not found at ./scripts/ollama/start.sh"
+    fi
+else
+    log "⊘ Ollama deployment skipped (set DEPLOY_OLLAMA=true to enable)"
+fi
+
 echo "📋 Installation Summary:"
 echo "-------------------------------------"
 echo "✅ System packages installed"

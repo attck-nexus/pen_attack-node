@@ -56,7 +56,7 @@ watch -n 1 'curl -s http://localhost:9100/api/status | jq .gpu'
 watch -n 2 'curl -s http://localhost:9100/api/metrics | jq .gpu.temperature'
 
 # Full status
-./status-ollama.sh --verbose
+./scripts/ollama/status.sh --verbose
 ```
 
 ## Performance Analysis
@@ -93,6 +93,12 @@ docker compose restart rtpi-gpu-monitor
 
 # Check logs
 docker compose logs rtpi-gpu-monitor
+
+# Restart stack
+./scripts/ollama/start.sh --force
+
+# Stop stack
+./scripts/ollama/stop.sh
 
 # Verify GPU devices
 ls -la /dev/mali0 /dev/dri/*
