@@ -59,6 +59,14 @@ volumes:
     driver: local
   kasm_kali_etc:
     driver: local
+  
+  # Ollama AI Inference Volumes
+  ollama_data:
+    driver: local
+  ollama_ui_data:
+    driver: local
+  gpu_monitor_data:
+    driver: local
 
 services:
   # =============================================================================
@@ -249,6 +257,127 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # =============================================================================
+  # OLLAMA AI INFERENCE STACK
+  # =============================================================================
+
+  rtpi-ollama:
+    build:
+      context: ./services/rtpi-ollama
+      dockerfile: Dockerfile
+    image: rtpi-pen/ollama:latest
+    container_name: rtpi-ollama
+    restart: unless-stopped
+    networks:
+      - rtpi_backend
+      - rtpi_frontend
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - /usr/lib/aarch64-linux-gnu/libmali-x11:/usr/lib/aarch64-linux-gnu/libmali-x11:ro
+    devices:
+      - /dev/mali0:/dev/mali0
+      - /dev/dri/card0:/dev/dri/card0
+      - /dev/dri/card1:/dev/dri/card1
+      - /dev/dri/renderD128:/dev/dri/renderD128
+      - /dev/dri/renderD129:/dev/dri/renderD129
+    environment:
+      - LD_LIBRARY_PATH=/usr/lib/aarch64-linux-gnu/libmali-x11:/usr/lib/aarch64-linux-gnu:${LD_LIBRARY_PATH}
+      - OLLAMA_GPU=1
+      - OLLAMA_NUM_GPU=1
+      - OLLAMA_DEBUG=1
+      - OPENCL_VENDOR_PATH=/usr/lib/aarch64-linux-gnu
+      - OCL_ICD_FILENAMES=/usr/lib/aarch64-linux-gnu/libmali-x11/libOpenCL.so.1
+      - OLLAMA_MAX_LOADED_MODELS=1
+      - OLLAMA_NUM_PARALLEL=1
+      - OLLAMA_MAX_QUEUE=512
+      - OLLAMA_KEEP_ALIVE=5m
+      - MALI_DEBUG=1
+      - GPU_MAX_HEAP_SIZE=512M
+      - GPU_MAX_ALLOC_SIZE=256M
+    deploy:
+      resources:
+        limits:
+          cpus: '6'
+          memory: 4G
+        reservations:
+          cpus: '4'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rtpi-ollama-ui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: rtpi-ollama-ui
+    restart: unless-stopped
+    networks:
+      - rtpi_backend
+      - rtpi_frontend
+    ports:
+      - "3000:8080"
+    volumes:
+      - ollama_ui_data:/app/data
+    environment:
+      - OLLAMA_API_BASE_URL=http://rtpi-ollama:11434
+      - OLLAMA_BASE_URL=http://rtpi-ollama:11434
+      - WEBUI_SECRET_KEY=rtpi-pen-secret-key-2025
+    depends_on:
+      - rtpi-ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  rtpi-gpu-monitor:
+    build:
+      context: ./services/rtpi-gpu-monitor
+      dockerfile: Dockerfile
+    image: rtpi-pen/gpu-monitor:latest
+    container_name: rtpi-gpu-monitor
+    restart: unless-stopped
+    networks:
+      - rtpi_backend
+      - rtpi_frontend
+    ports:
+      - "9100:9100"
+    volumes:
+      - gpu_monitor_data:/app/data
+      - ./services/rtpi-gpu-monitor/configs/monitor.yaml:/app/monitor.yaml:ro
+    devices:
+      - /dev/mali0:/dev/mali0
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      - rtpi-ollama
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     logging:
       driver: "json-file"
       options:

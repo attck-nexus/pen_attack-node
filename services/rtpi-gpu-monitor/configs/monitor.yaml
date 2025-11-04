@@ -1,0 +1,46 @@
+# GPU Monitor Configuration for RTPI-PEN
+# Monitors Mali G610 GPU and Ollama service metrics
+
+# Ollama API endpoint
+ollama_api_url: "http://rtpi-ollama:11434"
+
+# GPU device paths
+gpu_devices:
+  - "/dev/mali0"
+  - "/dev/dri/renderD128"
+  - "/dev/dri/renderD129"
+
+# Update interval in seconds
+update_interval: 5
+
+# Maximum history samples to keep (3600 = 1 hour at 5s intervals)
+history_size: 3600
+
+# Alert thresholds
+alerts:
+  gpu_utilization_threshold: 90
+  temperature_threshold: 80
+  memory_threshold: 85
+  cpu_threshold: 95
+  system_memory_threshold: 90
+
+# Logging configuration
+logging:
+  level: "INFO"
+  file: "/app/data/monitor.log"
+  max_size_mb: 100
+  backup_count: 5
+
+# Performance tuning
+performance:
+  thermal_throttling_detection: true
+  critical_temperature: 95
+  persist_history: true
+  history_db_path: "/app/data/history.db"
+
+# Mali GPU specific settings
+gpu_config:
+  compute_mode: "default"
+  frequency_scaling: "adaptive"
+  report_memory: true
+  device_index: 0
