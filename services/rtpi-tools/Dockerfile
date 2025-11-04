@@ -30,8 +30,6 @@ RUN apt-get update && apt-get install -y \
     default-jdk golang-go \
     # SSL/TLS tools
     certbot \
-    # Additional tools
-    powershell \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js (latest LTS) - Clean installation

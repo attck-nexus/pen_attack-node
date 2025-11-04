@@ -27,6 +27,24 @@ else
     warn() { echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"; }
     error() { echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"; }
     info() { echo -e "${BLUE}[$(date +'%Y-%m-%d %H:%M:%S')] INFO: $1${NC}"; }
+    
+    # Stub implementations for missing resilience framework functions
+    save_checkpoint() {
+        log "Checkpoint: $1"
+    }
+    
+    run_installation_resilience_check() {
+        log "Running basic installation check (resilience framework not available)"
+        return 0
+    }
+    
+    download_with_resilience() {
+        local url="$1"
+        local filename="$2"
+        log "Downloading: $filename"
+        curl -O "$url"
+        return $?
+    }
 fi
 
 # Kasm detection and cleanup functions
@@ -592,16 +610,41 @@ esac
 
 # Only proceed with installation if not skipped
 if [ "$SKIP_KASM_INSTALLATION" != "true" ]; then
-    cd /opt
+    # Kasm version configuration (update these for new versions)
+    KASM_VERSION="1.17.0"
+    KASM_BUILD="7f020d"
+    
+    # Detect system architecture
+    SYSTEM_ARCH=$(uname -m)
+    if [ "$SYSTEM_ARCH" = "aarch64" ]; then
+        KASM_ARCH="arm64"
+        log "Detected ARM64 architecture"
+    elif [ "$SYSTEM_ARCH" = "x86_64" ]; then
+        KASM_ARCH="amd64"
+        log "Detected AMD64 architecture"
+    else
+        error "Unsupported architecture: $SYSTEM_ARCH"
+        exit 1
+    fi
+    
+    # Use /tmp for cleaner installation
+    cd /tmp
+    
+    # Construct download URLs based on architecture and version
+    KASM_BASE_URL="https://kasm-static-content.s3.amazonaws.com"
+    KASM_RELEASE="kasm_release_${KASM_VERSION}.${KASM_BUILD}.tar.gz"
+    KASM_SERVICE="kasm_release_service_images_${KASM_ARCH}_${KASM_VERSION}.${KASM_BUILD}.tar.gz"
+    KASM_WORKSPACE="kasm_release_workspace_images_${KASM_ARCH}_${KASM_VERSION}.${KASM_BUILD}.tar.gz"
+    KASM_PLUGIN="kasm_release_plugin_images_${KASM_ARCH}_${KASM_VERSION}.${KASM_BUILD}.tar.gz"
 
-    # Download Kasm 1.17.0 release files with resilience
-    echo "Downloading Kasm 1.17.0 release files with resilience..."
+    # Download Kasm release files with resilience
+    echo "Downloading Kasm ${KASM_VERSION} release files for ${KASM_ARCH} architecture..."
     
     kasm_files=(
-        "https://kasm-static-content.s3.amazonaws.com/kasm_release_1.17.0.7f020d.tar.gz"
-        "https://kasm-static-content.s3.amazonaws.com/kasm_release_service_images_amd64_1.17.0.7f020d.tar.gz"
-        "https://kasm-static-content.s3.amazonaws.com/kasm_release_workspace_images_amd64_1.17.0.7f020d.tar.gz"
-        "https://kasm-static-content.s3.amazonaws.com/kasm_release_plugin_images_amd64_1.17.0.7f020d.tar.gz"
+        "${KASM_BASE_URL}/${KASM_RELEASE}"
+        "${KASM_BASE_URL}/${KASM_SERVICE}"
+        "${KASM_BASE_URL}/${KASM_WORKSPACE}"
+        "${KASM_BASE_URL}/${KASM_PLUGIN}"
     )
     
     # Use resilient download if available, otherwise fallback to curl
@@ -629,18 +672,20 @@ if [ "$SKIP_KASM_INSTALLATION" != "true" ]; then
     save_checkpoint "KASM_FILES_DOWNLOADED"
 
     # Extract and install Kasm
-    echo "Installing Kasm Workspaces..."
-    tar -xf kasm_release_1.17.0.7f020d.tar.gz
+    echo "Installing Kasm Workspaces ${KASM_VERSION}..."
+    tar -xf ${KASM_RELEASE}
     
-    # Run the installation script with the necessary parameters
+    # Run the installation script with architecture-specific parameters
+    log "Running Kasm installer with ${KASM_ARCH} images..."
     sudo bash kasm_release/install.sh -L 8443 \
-        --offline-workspaces /opt/kasm_release_workspace_images_amd64_1.17.0.7f020d.tar.gz \
-        --offline-service /opt/kasm_release_service_images_amd64_1.17.0.7f020d.tar.gz \
-        --offline-network-plugin /opt/kasm_release_plugin_images_amd64_1.17.0.7f020d.tar.gz
+        --offline-workspaces /tmp/${KASM_WORKSPACE} \
+        --offline-service /tmp/${KASM_SERVICE} \
+        --offline-network-plugin /tmp/${KASM_PLUGIN}
 
-    # Install and enable Kasm network plugin
-    echo "Setting up Kasm Network Plugin..."
-    PLUGIN_NAME="kasmweb/kasm-network-plugin:amd64-1.2"
+    # Install and enable Kasm network plugin (architecture-specific)
+    echo "Setting up Kasm Network Plugin for ${KASM_ARCH}..."
+    PLUGIN_NAME="kasmweb/kasm-network-plugin:${KASM_ARCH}-1.2"
+    log "Using plugin: $PLUGIN_NAME"
 
     # Check if plugin already exists
     if docker plugin ls | grep -q "$PLUGIN_NAME"; then
@@ -1157,9 +1202,87 @@ EOF
     return 1
 }
 
+# Port conflict detection and cleanup for web ports
+check_web_port_conflicts() {
+    log "Checking for port conflicts (80, 443)..."
+    
+    local ports_in_use=false
+    local conflicting_services=""
+    
+    # Check port 80
+    local port80_users=$(sudo lsof -i :80 -sTCP:LISTEN 2>/dev/null | tail -n +2 || echo "")
+    if [ -n "$port80_users" ]; then
+        ports_in_use=true
+        conflicting_services="${conflicting_services}Port 80 (HTTP):\n$port80_users\n"
+    fi
+    
+    # Check port 443
+    local port443_users=$(sudo lsof -i :443 -sTCP:LISTEN 2>/dev/null | tail -n +2 || echo "")
+    if [ -n "$port443_users" ]; then
+        ports_in_use=true
+        conflicting_services="${conflicting_services}Port 443 (HTTPS):\n$port443_users\n"
+    fi
+    
+    if [ "$ports_in_use" = true ]; then
+        warn "⚠️  Port conflicts detected:"
+        echo -e "$conflicting_services"
+        return 1
+    else
+        log "✅ Ports 80 and 443 are available"
+        return 0
+    fi
+}
+
+cleanup_web_port_conflicts() {
+    log "Cleaning up web port conflicts..."
+    
+    # Stop native nginx if running
+    if systemctl is-active --quiet nginx 2>/dev/null; then
+        log "Stopping native nginx service..."
+        sudo systemctl stop nginx || true
+        log "✓ Native nginx stopped"
+    fi
+    
+    # Stop Apache if running
+    if systemctl is-active --quiet apache2 2>/dev/null; then
+        log "Stopping Apache service..."
+        sudo systemctl stop apache2 || true
+        log "✓ Apache stopped"
+    fi
+    
+    # Kill any remaining processes on ports 80 and 443
+    for port in 80 443; do
+        local port_pids=$(sudo lsof -t -i:$port 2>/dev/null || echo "")
+        if [ -n "$port_pids" ]; then
+            log "Killing processes on port $port..."
+            for pid in $port_pids; do
+                sudo kill -9 "$pid" 2>/dev/null || true
+            done
+        fi
+    done
+    
+    # Wait for ports to be released
+    sleep 2
+    
+    # Verify ports are now free
+    if check_web_port_conflicts; then
+        log "✅ Web ports successfully freed"
+        return 0
+    else
+        warn "⚠️  Some ports may still be in use"
+        return 1
+    fi
+}
+
 echo "🐳 Building and starting containerized services..."
 echo "-------------------------------------"
 cd /opt/rtpi-pen
+
+# Check and cleanup port conflicts before deployment
+if ! check_web_port_conflicts; then
+    warn "Attempting to free up conflicting ports..."
+    cleanup_web_port_conflicts
+fi
 
 # Generate SysReptor configuration before building containers
 generate_sysreptor_config

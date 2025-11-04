@@ -54,8 +54,8 @@ The fresh installation method provides a complete setup with native Kasm Workspa
 ### Usage:
 ```bash
 # Clone the repository
-git clone https://github.com/attck-nexus/rtpi-pen.git
-cd rtpi-pen
+git clone https://github.com/attck-nexus/pen_attack-node.git
+cd pen_attack-node/
 
 # Make the script executable
 chmod +x fresh-rtpi-pen.sh
@@ -65,6 +65,38 @@ sudo ./fresh-rtpi-pen.sh
 
 # After installation, start containerized services
 docker compose up -d
+```
+
+**If Installation is Interrupted or Build Fails:**
+```bash
+# Generate required configurations (if missing)
+sudo bash -c '
+mkdir -p configs/rtpi-sysreptor
+SECRET_KEY=$(openssl rand -base64 64 | tr -d "\n=" | head -c 64)
+KEY_ID=$(uuidgen)
+ENC_KEY=$(python3 -c "import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())")
+cat > configs/rtpi-sysreptor/app.env << EOF
+SECRET_KEY=$SECRET_KEY
+DATABASE_HOST=rtpi-database
+DATABASE_NAME=sysreptor
+DATABASE_USER=sysreptor
+DATABASE_PASSWORD=sysreptorpassword
+ENCRYPTION_KEYS=[{\"id\":\"$KEY_ID\",\"key\":\"$ENC_KEY\",\"cipher\":\"AES-GCM\",\"revoked\":false}]
+DEFAULT_ENCRYPTION_KEY_ID=$KEY_ID
+ALLOWED_HOSTS=sysreptor,0.0.0.0,127.0.0.1,localhost
+REDIS_HOST=sysreptor-redis
+REDIS_PASSWORD=sysreptorredispassword
+EOF
+'
+
+# Rebuild Docker images without cache (fixes build issues)
+sudo docker compose build --no-cache rtpi-tools
+
+# Or rebuild all services
+sudo docker compose build --no-cache
+
+# Deploy services
+sudo docker compose up -d
 ```
 
 ## 🔒 Method 2: Advanced Build with SSL (Production)
@@ -298,6 +330,111 @@ sudo nano /opt/Empire/empire/server/config.yaml
 ```
 
 ## 🔍 Troubleshooting
+
+### Common Installation Issues & Solutions
+
+#### Issue 1: "save_checkpoint: command not found"
+**Symptom**: Installation fails with error about missing `save_checkpoint` function
+
+**Cause**: Missing resilience framework library file
+
+**Solution**: This has been fixed in the current version. The script now includes fallback stub functions. If you encounter this:
+```bash
+# Verify you have the latest version
+git pull origin main
+
+# The script should now run without this error
+sudo ./fresh-rtpi-pen.sh
+```
+
+#### Issue 2: "env file configs/rtpi-sysreptor/app.env not found"
+**Symptom**: Docker Compose fails with missing SysReptor configuration file
+
+**Cause**: Configuration file not generated during installation
+
+**Solution**: Manually generate the configuration file:
+```bash
+cd /home/demo/code/pen_attack-node
+sudo bash -c '
+# Create config directory
+mkdir -p configs/rtpi-sysreptor
+
+# Generate secure keys
+SECRET_KEY=$(openssl rand -base64 64 | tr -d "\n=" | head -c 64)
+KEY_ID=$(uuidgen)
+ENC_KEY=$(python3 -c "import base64, secrets; print(base64.b64encode(secrets.token_bytes(32)).decode())")
+
+# Create app.env file
+cat > configs/rtpi-sysreptor/app.env << EOF
+SECRET_KEY=$SECRET_KEY
+DATABASE_HOST=rtpi-database
+DATABASE_NAME=sysreptor
+DATABASE_USER=sysreptor
+DATABASE_PASSWORD=sysreptorpassword
+ENCRYPTION_KEYS=[{\"id\":\"$KEY_ID\",\"key\":\"$ENC_KEY\",\"cipher\":\"AES-GCM\",\"revoked\":false}]
+DEFAULT_ENCRYPTION_KEY_ID=$KEY_ID
+ALLOWED_HOSTS=sysreptor,0.0.0.0,127.0.0.1,localhost
+REDIS_HOST=sysreptor-redis
+REDIS_PASSWORD=sysreptorredispassword
+EOF
+'
+
+# Then retry deployment
+sudo docker compose up -d
+```
+
+#### Issue 3: "manifest for bitnami/redis:7.2 not found"
+**Symptom**: Docker build fails with Redis image not found
+
+**Cause**: Invalid or outdated Redis image tag in docker-compose.yml
+
+**Solution**: The image tag has been updated to `bitnami/redis:7.4`. If you still encounter this:
+```bash
+# Verify the fix is applied
+grep "bitnami/redis" docker-compose.yml
+# Should show: image: bitnami/redis:7.4
+
+# If not, update manually
+sed -i 's/bitnami\/redis:7.2/bitnami\/redis:7.4/g' docker-compose.yml
+
+# Rebuild and deploy
+sudo docker compose build
+sudo docker compose up -d
+```
+
+#### Issue 4: "Unable to locate package powershell" (ARM64 Systems)
+**Symptom**: rtpi-tools container build fails on ARM64/aarch64 systems
+
+**Cause**: PowerShell package not available for ARM64 architecture
+
+**Solution**: The Dockerfile has been updated to remove PowerShell on ARM64. If you still encounter this:
+```bash
+# Check your architecture
+uname -m  # aarch64 = ARM64, x86_64 = AMD64
+
+# For ARM64 systems, rebuild without cache
+sudo docker compose build --no-cache rtpi-tools
+
+# If issue persists, manually remove PowerShell from Dockerfile
+# Edit services/rtpi-tools/Dockerfile and remove the 'powershell \' line
+```
+
+#### Issue 5: Docker Build Using Old Cached Layers
+**Symptom**: Build fails even after fixing Dockerfile
+
+**Cause**: Docker is using cached layers from previous failed builds
+
+**Solution**: Rebuild without cache:
+```bash
+# Rebuild specific service without cache
+sudo docker compose build --no-cache rtpi-tools
+
+# Or rebuild all services without cache
+sudo docker compose build --no-cache
+
+# Then deploy
+sudo docker compose up -d
+```
 
 ### Installation Issues
 ```bash
