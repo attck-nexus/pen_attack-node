@@ -63,6 +63,11 @@ chmod +x fresh-rtpi-pen.sh
 # Run the complete installation (requires root)
 sudo ./fresh-rtpi-pen.sh
 
+# Build Docker images without cache
+sudo docker compose build --no-cache rtpi-tools
+## Or rebuild all services
+sudo docker compose build --no-cache
+
 # After installation, start containerized services
 docker compose up -d
 ```
